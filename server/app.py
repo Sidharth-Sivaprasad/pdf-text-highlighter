@@ -93,7 +93,7 @@ def find_text_in_page(ocr_data, search_text, page_num):
     Finds
     Returns matches found on this page
     """
-    sentence = []
+    # sentence = []
     matches = []
     search_lower = search_text.lower().strip()
     words = []
@@ -136,15 +136,13 @@ def find_text_in_page(ocr_data, search_text, page_num):
                     match_length += 1
                     match_text.append(words[i + j]["text"])
                     match_scores.append(score)
-                    # print(f"Matching '{words[i + j]['text']}' with '{search_word}' - Score: {score}")
-                    sentence.append(f"Matching '{words[i + j]['text']}' with '{search_word}' - Score: {score}")
+                    # sentence.append(f"Matching '{words[i + j]['text']}' with '{search_word}' - Score: {score}")
                 else:
                     break
 
         # Only accept if all words matched
         if match_length == len(search_words):
-            print(sentence)
-            sentence = []
+            # sentence = []
             matched_words = words[i : i + match_length]
             
             # Calculate bounding box
@@ -180,8 +178,8 @@ def find_text_in_page(ocr_data, search_text, page_num):
                     "match_score": round(avg_score, 1),
                 }
             )
-        else :
-            sentence = []
+        # else :
+        #     sentence = []
 
     return matches
 
@@ -311,7 +309,6 @@ if __name__ == "__main__":
         print("✗ Tesseract OCR not found. Install it before running.")
         exit(1)
 
-    # print(f"Max Workers: {MAX_WORKERS}")
     print(f"OCR DPI: {OCR_DPI}")
     print(f"Min Confidence: {MIN_CONFIDENCE}%")
     print("Server starting on http://localhost:8000")

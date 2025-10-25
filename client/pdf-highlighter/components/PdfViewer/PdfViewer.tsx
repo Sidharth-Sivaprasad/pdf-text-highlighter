@@ -1,21 +1,39 @@
 "use client";
 
-import { useRef, useEffect, useState } from "react"; // ADDED useState
+import { useRef, useEffect, useState } from "react";
 import WebViewer, { WebViewerInstance } from "@pdftron/webviewer";
 import { useSearch } from "@/context/SearchContext";
-import { Loader2 } from "lucide-react"; // ADDED Loader icon
+import { Loader2 } from "lucide-react";
 
-export default function PdfViewer() {
+interface HighlightLocation {
+	left: number;
+	top: number;
+	width: number;
+	height: number;
+	context?: string;
+	matched_text?: string;
+}
+
+interface CurrentHighlight {
+	page: number;
+	matchIndex: number;
+	location: HighlightLocation;
+}
+
+interface PdfViewerProps {
+	currentHighlight?: CurrentHighlight | null;
+}
+
+export default function PdfViewer({ currentHighlight }: PdfViewerProps) {
 	const { file, results } = useSearch();
 	const viewer = useRef<HTMLDivElement>(null);
 	const instanceRef = useRef<WebViewerInstance | null>(null);
 	const isInitialized = useRef(false);
 	const DPI = 300; // DPI is not used in this component, but kept here.
 
-	// ADDED State to track viewer loading status
 	const [isViewerLoading, setIsViewerLoading] = useState(true);
+	console.log("Current Highlight in PdfViewer:", currentHighlight);
 
-	// Initialize WebViewer once
 	useEffect(() => {
 		if (viewer.current == null) return;
 		if (isInitialized.current) return;
@@ -42,7 +60,6 @@ export default function PdfViewer() {
 
 				documentViewer.addEventListener("documentLoaded", () => {
 					console.log("Document loaded successfully");
-					// Document is ready, stop the main loader
 					setIsViewerLoading(false);
 
 					if (results?.matches && results.matches.length > 0) {
@@ -94,16 +111,79 @@ export default function PdfViewer() {
 		}
 	}, [file]);
 
-	// Update highlights when results change
-	// This is fast, so we don't need a loader specific to highlights,
-	// but we ensure the document is loaded first.
 	useEffect(() => {
-		if (
-			!instanceRef.current ||
-			!results?.matches ||
-			results.matches.length === 0
-		)
+		if (!instanceRef.current) return;
+
+		const { documentViewer, annotationManager, Annotations } =
+			instanceRef.current.Core;
+
+		if (!documentViewer.getDocument()) return;
+
+		if (!currentHighlight) {
+			try {
+				// Remove previous overlay highlight (if any)
+				const existing = annotationManager
+					.getAnnotationsList()
+					.filter((a) => a.Author === "CurrentHighlight");
+
+				if (existing.length > 0) {
+					annotationManager.deleteAnnotations(existing, {
+						force: true,
+					});
+				}
+			} catch (err) {
+				console.error("Error removing current highlight overlay:", err);
+			}
 			return;
+		}
+
+		const { page, location } = currentHighlight;
+
+		// Jump to the target page
+		documentViewer.setCurrentPage(page, true);
+
+		try {
+			// Remove previous overlay highlight (if any)
+			const existing = annotationManager
+				.getAnnotationsList()
+				.filter((a) => a.Author === "CurrentHighlight");
+
+			if (existing.length > 0) {
+				annotationManager.deleteAnnotations(existing, {
+					force: true,
+				});
+			}
+
+			// Create new overlay highlight
+			const x = (location.left * 72) / 300;
+			const y = (location.top * 72) / 300;
+			const width = (location.width * 72) / 300;
+			const height = (location.height * 72) / 300;
+
+			const highlight = new Annotations.RectangleAnnotation({
+				PageNumber: page,
+				X: x,
+				Y: y,
+				Width: width,
+				Height: height,
+				StrokeColor: new Annotations.Color(255, 0, 0), // red border
+				FillColor: new Annotations.Color(255, 0, 0, 0.15), // semi-transparent fill
+				StrokeThickness: 1,
+				Opacity: 0.6,
+			});
+
+			// Mark this as the temporary “current highlight”
+			highlight.Author = "CurrentHighlight";
+
+			annotationManager.addAnnotation(highlight);
+			annotationManager.drawAnnotationsFromList([highlight]);
+		} catch (err) {
+			console.error("Error adding current highlight overlay:", err);
+		}
+	}, [currentHighlight]);
+
+	useEffect(() => {
+		if (!instanceRef.current || !results?.matches) return;
 
 		const { documentViewer } = instanceRef.current.Core;
 
@@ -121,6 +201,8 @@ export default function PdfViewer() {
 		const existingAnnotations = annotationManager.getAnnotationsList();
 		annotationManager.deleteAnnotations(existingAnnotations);
 		console.log(matches);
+
+		if (matches.length === 0) return;
 
 		matches.forEach((match) => {
 			const pageNumber = match.page;
@@ -165,9 +247,9 @@ export default function PdfViewer() {
 		);
 
 		// Jump to first highlight
-		// if (matches.length > 0 && matches[0].page) {
-		//  documentViewer.setCurrentPage(matches[0].page);
-		// }
+		if (matches.length > 0 && matches[0].page) {
+			documentViewer.setCurrentPage(matches[0].page, true);
+		}
 	};
 
 	return (
