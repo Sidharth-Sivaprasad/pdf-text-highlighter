@@ -50,7 +50,9 @@ const Header: React.FC<Props> = ({ title = "PDF Text Highlighter" }) => {
 						strokeLinecap="round"
 					/>
 				</svg>
-				<h1 className="text-lg font-normal text-white">{title}</h1>
+				<h1 className="text-lg font-normal text-white select-none pointer-events-none">
+					{title}
+				</h1>
 			</div>
 		</header>
 	);

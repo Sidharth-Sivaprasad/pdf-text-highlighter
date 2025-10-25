@@ -1,5 +1,5 @@
 """
-PDF Text Search Backend with OCR and Chunked Upload
+Image PDF Text Search Backend with OCR and Chunked Upload
 """
 
 from flask import Flask, request, jsonify
@@ -12,9 +12,11 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 import os
 import multiprocessing
 import psutil
-from rapidfuzz import fuzz
+# from rapidfuzz import fuzz
+from fuzzywuzzy import fuzz
 
-# Configuration
+
+# Configs
 UPLOAD_FOLDER = "tmp_uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
@@ -51,14 +53,11 @@ def get_optimal_workers(total_pages: int):
     max_by_ram = int(total_ram_gb // 0.5)
     print(f"System has {cpu_count} CPUs and {total_ram_gb:.2f}GB RAM and {max_by_ram}" )
 
-    # Don’t exceed system or logical caps
     upper_limit = min(cpu_count - 1, max_by_ram, 8)
 
-    # Don’t use more workers than pages
     optimal = min(upper_limit, total_pages)
     print(f"Optimal workers based on system resources: {optimal}")
 
-    # Always use at least 2 workers for parallelism
     return max(2, optimal)
 
 
@@ -88,75 +87,15 @@ def process_page(page_data):
         return []
 
 
-# def find_text_in_page(ocr_data, search_text, page_num):
-#     matches = []
-#     search_lower = search_text.lower().strip()
-
-#     words = []
-#     for i in range(len(ocr_data["text"])):
-#         if int(ocr_data["conf"][i]) > MIN_CONFIDENCE:
-#             word = ocr_data["text"][i].strip()
-#             if word:
-#                 words.append(
-#                     {
-#                         "text": word,
-#                         "left": ocr_data["left"][i],
-#                         "top": ocr_data["top"][i],
-#                         "width": ocr_data["width"][i],
-#                         "height": ocr_data["height"][i],
-#                         "index": i,
-#                     }
-#                 )
-
-#     search_words = search_lower.split()
-
-#     for i in range(len(words)):
-#         match_length = 0
-#         match_text = []
-
-#         for j, search_word in enumerate(search_words):
-#             if i + j < len(words):
-#                 word_lower = words[i + j]["text"].lower()
-#                 if search_word in word_lower or word_lower in search_word:
-#                     match_length += 1
-#                     match_text.append(words[i + j]["text"])
-#                 else:
-#                     break
-
-#         if match_length == len(search_words):
-#             first_word = words[i]
-#             last_word = words[i + match_length - 1]
-
-#             left = first_word["left"]
-#             top = min(first_word["top"], last_word["top"])
-#             right = last_word["left"] + last_word["width"]
-#             bottom = max(
-#                 first_word["top"] + first_word["height"], last_word["top"] + last_word["height"]
-#             )
-
-#             context_start = max(0, i - 5)
-#             context_end = min(len(words), i + match_length + 5)
-#             context = " ".join([words[k]["text"] for k in range(context_start, context_end)])
-
-#             matches.append(
-#                 {
-#                     "page": page_num + 1,
-#                     "left": int(left),
-#                     "top": int(top),
-#                     "width": int(right - left),
-#                     "height": int(bottom - top),
-#                     "matched_text": " ".join(match_text),
-#                     "context": context,
-#                     "confidence": "high",
-#                 }
-#             )
-
-#     return matches
 
 def find_text_in_page(ocr_data, search_text, page_num):
+    """
+    Finds
+    Returns matches found on this page
+    """
+    sentence = []
     matches = []
     search_lower = search_text.lower().strip()
-
     words = []
     for i in range(len(ocr_data["text"])):
         if int(ocr_data["conf"][i]) > MIN_CONFIDENCE:
@@ -180,6 +119,7 @@ def find_text_in_page(ocr_data, search_text, page_num):
         match_text = []
         match_scores = []
 
+
         for j, search_word in enumerate(search_words):
             if i + j < len(words):
                 word_lower = words[i + j]["text"].lower()
@@ -188,32 +128,32 @@ def find_text_in_page(ocr_data, search_text, page_num):
                 score = fuzz.ratio(word_lower, search_word)
                 
                 # Match if: exact substring OR high similarity (>= 80%)
-                is_match = (
-                    search_word in word_lower or 
-                    word_lower in search_word or 
-                    score >= 80
-                )
+                    #    search_word in word_lower or 
+                    # word_lower in search_word) or
+                is_match = ( score >= 80 )
                 
                 if is_match:
                     match_length += 1
                     match_text.append(words[i + j]["text"])
                     match_scores.append(score)
+                    # print(f"Matching '{words[i + j]['text']}' with '{search_word}' - Score: {score}")
+                    sentence.append(f"Matching '{words[i + j]['text']}' with '{search_word}' - Score: {score}")
                 else:
                     break
 
         # Only accept if all words matched
         if match_length == len(search_words):
-            # Get all matched words
+            print(sentence)
+            sentence = []
             matched_words = words[i : i + match_length]
             
-            # Calculate bounding box that encompasses ALL matched words
+            # Calculate bounding box
             left = min(w["left"] for w in matched_words)
             top = min(w["top"] for w in matched_words)
             right = max(w["left"] + w["width"] for w in matched_words)
             bottom = max(w["top"] + w["height"] for w in matched_words)
 
-            # Add padding to make the box bigger and more visible
-            PADDING = 15  # pixels of padding on each side
+            PADDING = 15
             left = max(0, left - PADDING)
             top = max(0, top - PADDING)
             right = right + PADDING
@@ -240,8 +180,14 @@ def find_text_in_page(ocr_data, search_text, page_num):
                     "match_score": round(avg_score, 1),
                 }
             )
+        else :
+            sentence = []
 
-    return matches# Routes
+    return matches
+
+
+# Routes
+
 @app.route("/health", methods=["GET"])
 def health_check():
     return jsonify({"status": "ok", "tesseract_available": check_tesseract()})

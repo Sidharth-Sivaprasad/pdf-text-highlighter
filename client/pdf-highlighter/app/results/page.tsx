@@ -2,7 +2,7 @@
 import { useRouter } from "next/navigation";
 import { useSearch } from "@/context/SearchContext";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Search } from "lucide-react";
+import { ArrowLeft, Search, Loader2 } from "lucide-react";
 import PdfViewer from "@/components/PdfViewer/PdfViewer";
 
 export default function ResultsPage() {
@@ -17,6 +17,8 @@ export default function ResultsPage() {
 	const [searchText, setSearchText] = useState(initialSearchText);
 	const [processing, setProcessing] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [uploadProgress, setUploadProgress] = useState(0);
+	const [currentStage, setCurrentStage] = useState<string>("");
 
 	useEffect(() => {
 		if (!results) {
@@ -24,10 +26,9 @@ export default function ResultsPage() {
 		}
 	}, [results, router]);
 
-	// Render null while redirecting
 	if (!results) return null;
 
-	// Allow searching again with same file
+	// search handler
 	const handleNewSearch = async () => {
 		if (!file || !searchText.trim()) {
 			setError("Please enter search text");
@@ -36,13 +37,28 @@ export default function ResultsPage() {
 
 		setProcessing(true);
 		setError(null);
+		setUploadProgress(0); // Reset progress
 
 		try {
-			await performSearch(file, searchText);
+			setCurrentStage("Preparing new search...");
+
+			await performSearch(file, searchText, (percent) => {
+				setUploadProgress(percent);
+				if (percent >= 80 && currentStage !== "Analyzing PDF...") {
+					setCurrentStage("Analyzing PDF...");
+				}
+			});
+
+			setCurrentStage("Search complete!");
+			setUploadProgress(100);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Search failed");
 		} finally {
-			setProcessing(false);
+			setTimeout(() => {
+				setProcessing(false);
+				setUploadProgress(0);
+				setCurrentStage("");
+			}, 1000);
 		}
 	};
 
@@ -51,11 +67,36 @@ export default function ResultsPage() {
 	}, [file]);
 
 	return (
-		<div className="min-h-screen bg-gradient-to-br from-gray-950 via-slate-950 via-amber-950 to-amber-950 p-8 pt-25 antialiased font-sans">
+		<div className="min-h-screen bg-gradient-to-br from-gray-950 via-slate-950 via-amber-950 to-amber-950 p-8 pt-25 antialiased font-sans relative">
+			{processing && (
+				<div className="fixed top-0 left-0 right-0 z-50 pt-1 shadow-xl bg-transparent backdrop-blur-sm">
+					<div className="max-w-lg mx-auto p-3 rounded-xl bg-blue-900/50 border border-blue-700 text-blue-100">
+						<div className="flex items-center justify-between mb-3">
+							<div className="flex items-center gap-3">
+								<Loader2 className="w-5 h-5 animate-spin text-blue-300" />
+								<p className="font-medium">{currentStage}</p>
+							</div>
+							<span className="text-sm font-light text-white tracking-wide">
+								{uploadProgress}%
+							</span>
+						</div>
+
+						<div className="w-full bg-gray-700 rounded-full h-2 overflow-hidden">
+							<div
+								className="bg-gradient-to-r from-indigo-500 to-blue-500 h-full transition-all duration-500 ease-out rounded-full shadow-lg"
+								style={{ width: `${uploadProgress}%` }}
+							></div>
+						</div>
+
+						<p className="text-xs mt-2 text-blue-300">
+							Running search against selected PDF. Do not navigate away.
+						</p>
+					</div>
+				</div>
+			)}
+
 			<div className="max-w-4xl mx-auto">
-				{/* Header (Back Button and Search Bar) */}
 				<div className="flex items-center gap-4 mb-3">
-					{/* Back Button */}
 					<button
 						onClick={() => router.push("/")}
 						className="flex-shrink-0 flex items-center gap-2 text-white hover:text-indigo-400 transition-colors"
@@ -63,7 +104,7 @@ export default function ResultsPage() {
 						<ArrowLeft className="w-5 h-5" />
 					</button>
 
-					{/* Search Component (Sleek and Compact) */}
+					{/* Search Component */}
 					<div className="flex-1 bg-slate-500/10 rounded-lg shadow-xl p-3 text-white border border-white/20 backdrop-blur-md">
 						<div className="flex gap-3 items-center">
 							<input
@@ -80,7 +121,10 @@ export default function ResultsPage() {
 								className="flex-shrink-0 px-4 py-1 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-gray-500 disabled:cursor-not-allowed flex items-center gap-2 transition-colors text-sm"
 							>
 								{processing ? (
-									"Searching..."
+									<>
+										<Loader2 className="w-4 h-4 animate-spin" />
+										Searching
+									</>
 								) : (
 									<>
 										<Search className="w-4 h-4" />
@@ -93,36 +137,32 @@ export default function ResultsPage() {
 				</div>
 
 				{error && (
-					<div className="p-3 bg-red-900/50 border border-red-500 rounded-lg text-red-200 text-sm max-w-lg mx-auto mb-4">
+					<div className="p-3 bg-red-900/50 border border-red-500 rounded-lg text-red-200 text-sm max-w-4xl mx-auto mb-4">
 						{error}
 					</div>
 				)}
 
-				{/* NEW: Search Statistics Box */}
+				{/* Stats Box */}
 				<div className="bg-slate-500/10 rounded-lg shadow-xl p-3 text-white border border-white/20 backdrop-blur-md mb-6">
 					<div className="flex items-center gap-4 text-sm">
-						{/* 1. Document Name (Truncated) */}
 						<div className="flex items-center gap-2">
 							<span className="text-gray-400 font-semibold">File:</span>
 							<span className="truncate max-w-xs">{file?.name || "N/A"}</span>
 						</div>
-						<div className="text-gray-600">|</div> {/* Separator */}
-						{/* 2. Total Matches */}
+						<div className="text-gray-600">|</div>
 						<div className="flex items-center gap-2">
 							<span className="text-gray-400 font-semibold">Matches:</span>
 							<span className="font-bold text-indigo-400">
 								{results.total_matches}
 							</span>
 						</div>
-						<div className="text-gray-600">|</div> {/* Separator */}
-						{/* 3. Pages Found */}
+						<div className="text-gray-600">|</div>
 						<div className="flex items-center gap-2">
 							<span className="text-gray-400 font-semibold">Pages:</span>
 							<span className="font-bold">
 								{results.pages_with_matches} / {results.total_pages}
 							</span>
 						</div>
-						<div className="text-gray-600">|</div> {/* Separator */}
 					</div>
 				</div>
 
