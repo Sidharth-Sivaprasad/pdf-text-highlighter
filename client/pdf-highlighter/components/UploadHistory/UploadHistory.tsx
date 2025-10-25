@@ -1,6 +1,6 @@
 "use client";
 import React from "react";
-import { FileText, Search } from "lucide-react";
+import { FileText } from "lucide-react";
 
 type UploadItem = {
 	fileName: string;
@@ -12,13 +12,13 @@ type UploadItem = {
 type Props = {
 	uploadHistory: UploadItem[];
 	onClear: () => void;
-	onReuse: (searchText: string) => void;
+	// onReuse: (searchText: string) => void;
 };
 
 const UploadHistory: React.FC<Props> = ({
 	uploadHistory,
 	onClear,
-	onReuse,
+	// onReuse,
 }) => {
 	return (
 		<div className="mt-6 p-6 bg-gray-800/80 rounded-lg shadow text-white">
@@ -65,13 +65,13 @@ const UploadHistory: React.FC<Props> = ({
 										)}
 									</div>
 								</div>
-								<button
+								{/* <button
 									onClick={() => onReuse(item.searchText)}
 									className="ml-2 p-1 hover:bg-gray-600 rounded transition-colors"
 									title="Reuse search text"
-								>
-									<Search className="w-4 h-4 text-gray-400" />
-								</button>
+								> */}
+								{/* <Search className="w-4 h-4 text-gray-400" /> */}
+								{/* </button> */}
 							</div>
 						</div>
 					))}
