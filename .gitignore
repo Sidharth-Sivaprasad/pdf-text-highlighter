@@ -9,6 +9,7 @@ server/__pycache__/
 server/.venv
 server/venv
 server/*.pyc
+server/tmp_uploads/
 
 # Environment files
 .env
