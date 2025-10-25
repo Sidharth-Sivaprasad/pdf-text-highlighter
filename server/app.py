@@ -1,31 +1,28 @@
 """
-PDF Text Search Backend with EasyOCR and Chunked Upload
+PDF Text Search Backend with OCR and Chunked Upload
 """
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import fitz  # PyMuPDF
-import easyocr
+import pytesseract
 from PIL import Image
-import numpy as np
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import os
 import multiprocessing
 import psutil
+from rapidfuzz import fuzz
 
-# ---------------- Configuration ---------------- #
+# Configuration
 UPLOAD_FOLDER = "tmp_uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-MAX_WORKERS = int(os.getenv("MAX_WORKERS", 10))
+MAX_WORKERS = int(os.getenv("MAX_WORKERS", 8))
 OCR_DPI = int(os.getenv("OCR_DPI", 300))
-MIN_CONFIDENCE = int(os.getenv("MIN_CONFIDENCE", 30))  # Percent
+MIN_CONFIDENCE = int(os.getenv("MIN_CONFIDENCE", 15))
 
-# Initialize EasyOCR reader globally
-reader = easyocr.Reader(['en'], gpu=False)  # Set gpu=True if GPU available
-
-# ---------------- Flask App ---------------- #
+# Flask App
 app = Flask(__name__)
 CORS(
     app,
@@ -33,110 +30,222 @@ CORS(
     supports_credentials=True,
 )
 
-# ---------------- Utility Functions ---------------- #
-def check_easyocr():
+# Utility Functions
+def check_tesseract():
     try:
-        _ = reader
+        _ = pytesseract.get_tesseract_version()
         return True
     except:
         return False
-
+    
+def fuzzy_match(word1, word2, threshold=80):
+    """Check if two words are similar enough using RapidFuzz"""
+    ratio = fuzz.ratio(word1.lower(), word2.lower())
+    return ratio >= threshold
+    
 def get_optimal_workers(total_pages: int):
     cpu_count = multiprocessing.cpu_count()
     total_ram_gb = psutil.virtual_memory().total / (1024 ** 3)
+
+    # Each worker may consume ~500MB depending on DPI/resolution
     max_by_ram = int(total_ram_gb // 0.5)
+    print(f"System has {cpu_count} CPUs and {total_ram_gb:.2f}GB RAM and {max_by_ram}" )
+
+    # Don’t exceed system or logical caps
     upper_limit = min(cpu_count - 1, max_by_ram, 8)
+
+    # Don’t use more workers than pages
     optimal = min(upper_limit, total_pages)
+    print(f"Optimal workers based on system resources: {optimal}")
+
+    # Always use at least 2 workers for parallelism
     return max(2, optimal)
 
-# ---------------- OCR & Search ---------------- #
+
 def process_page(page_data):
+    """
+    Process a single PDF page with OCR
+    Returns list of matches found on this page
+    """
     page_num, pdf_bytes, search_text = page_data
     try:
         pdf = fitz.open(stream=pdf_bytes, filetype="pdf")
         page = pdf[page_num]
 
-        # Rasterize page to image
         pix = page.get_pixmap(dpi=OCR_DPI)
         img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-        img_np = np.array(img)
+        img = img.convert('L')
+        tesseract_config = '--psm 3 --oem 3'
 
-        # OCR with EasyOCR
-        ocr_results = reader.readtext(img_np)
-
-        matches = find_text_in_page_easyocr(ocr_results, search_text, page_num)
+        ocr_data = pytesseract.image_to_data(img,lang='eng',config=tesseract_config, output_type=pytesseract.Output.DICT)
+        matches = find_text_in_page(ocr_data, search_text, page_num)
         pdf.close()
+
         print(f"✓ Page {page_num + 1} - Found {len(matches)} match(es)")
         return matches
     except Exception as e:
         print(f"✗ Error processing page {page_num + 1}: {str(e)}")
         return []
 
-def find_text_in_page_easyocr(ocr_results, search_text, page_num):
+
+# def find_text_in_page(ocr_data, search_text, page_num):
+#     matches = []
+#     search_lower = search_text.lower().strip()
+
+#     words = []
+#     for i in range(len(ocr_data["text"])):
+#         if int(ocr_data["conf"][i]) > MIN_CONFIDENCE:
+#             word = ocr_data["text"][i].strip()
+#             if word:
+#                 words.append(
+#                     {
+#                         "text": word,
+#                         "left": ocr_data["left"][i],
+#                         "top": ocr_data["top"][i],
+#                         "width": ocr_data["width"][i],
+#                         "height": ocr_data["height"][i],
+#                         "index": i,
+#                     }
+#                 )
+
+#     search_words = search_lower.split()
+
+#     for i in range(len(words)):
+#         match_length = 0
+#         match_text = []
+
+#         for j, search_word in enumerate(search_words):
+#             if i + j < len(words):
+#                 word_lower = words[i + j]["text"].lower()
+#                 if search_word in word_lower or word_lower in search_word:
+#                     match_length += 1
+#                     match_text.append(words[i + j]["text"])
+#                 else:
+#                     break
+
+#         if match_length == len(search_words):
+#             first_word = words[i]
+#             last_word = words[i + match_length - 1]
+
+#             left = first_word["left"]
+#             top = min(first_word["top"], last_word["top"])
+#             right = last_word["left"] + last_word["width"]
+#             bottom = max(
+#                 first_word["top"] + first_word["height"], last_word["top"] + last_word["height"]
+#             )
+
+#             context_start = max(0, i - 5)
+#             context_end = min(len(words), i + match_length + 5)
+#             context = " ".join([words[k]["text"] for k in range(context_start, context_end)])
+
+#             matches.append(
+#                 {
+#                     "page": page_num + 1,
+#                     "left": int(left),
+#                     "top": int(top),
+#                     "width": int(right - left),
+#                     "height": int(bottom - top),
+#                     "matched_text": " ".join(match_text),
+#                     "context": context,
+#                     "confidence": "high",
+#                 }
+#             )
+
+#     return matches
+
+def find_text_in_page(ocr_data, search_text, page_num):
     matches = []
     search_lower = search_text.lower().strip()
+
+    words = []
+    for i in range(len(ocr_data["text"])):
+        if int(ocr_data["conf"][i]) > MIN_CONFIDENCE:
+            word = ocr_data["text"][i].strip()
+            if word:
+                words.append(
+                    {
+                        "text": word,
+                        "left": ocr_data["left"][i],
+                        "top": ocr_data["top"][i],
+                        "width": ocr_data["width"][i],
+                        "height": ocr_data["height"][i],
+                        "index": i,
+                    }
+                )
+
     search_words = search_lower.split()
 
-    # Convert EasyOCR output to word dicts
-    words = []
-    for bbox, text, conf in ocr_results:
-        if conf * 100 >= MIN_CONFIDENCE:
-            x_min = int(min([p[0] for p in bbox]))
-            y_min = int(min([p[1] for p in bbox]))
-            x_max = int(max([p[0] for p in bbox]))
-            y_max = int(max([p[1] for p in bbox]))
-            words.append({
-                "text": text.strip(),
-                "left": x_min,
-                "top": y_min,
-                "width": x_max - x_min,
-                "height": y_max - y_min,
-                "conf": conf,
-            })
-
-    # Search for consecutive word matches
     for i in range(len(words)):
         match_length = 0
         match_text = []
+        match_scores = []
+
         for j, search_word in enumerate(search_words):
             if i + j < len(words):
                 word_lower = words[i + j]["text"].lower()
-                if search_word in word_lower or word_lower in search_word:
+                
+                # Calculate similarity score
+                score = fuzz.ratio(word_lower, search_word)
+                
+                # Match if: exact substring OR high similarity (>= 80%)
+                is_match = (
+                    search_word in word_lower or 
+                    word_lower in search_word or 
+                    score >= 80
+                )
+                
+                if is_match:
                     match_length += 1
                     match_text.append(words[i + j]["text"])
+                    match_scores.append(score)
                 else:
                     break
 
+        # Only accept if all words matched
         if match_length == len(search_words):
-            first_word = words[i]
-            last_word = words[i + match_length - 1]
+            # Get all matched words
+            matched_words = words[i : i + match_length]
+            
+            # Calculate bounding box that encompasses ALL matched words
+            left = min(w["left"] for w in matched_words)
+            top = min(w["top"] for w in matched_words)
+            right = max(w["left"] + w["width"] for w in matched_words)
+            bottom = max(w["top"] + w["height"] for w in matched_words)
 
-            left = first_word["left"]
-            top = min(first_word["top"], last_word["top"])
-            right = last_word["left"] + last_word["width"]
-            bottom = max(first_word["top"] + first_word["height"], last_word["top"] + last_word["height"])
+            # Add padding to make the box bigger and more visible
+            PADDING = 15  # pixels of padding on each side
+            left = max(0, left - PADDING)
+            top = max(0, top - PADDING)
+            right = right + PADDING
+            bottom = bottom + PADDING
 
             context_start = max(0, i - 5)
             context_end = min(len(words), i + match_length + 5)
             context = " ".join([words[k]["text"] for k in range(context_start, context_end)])
 
-            matches.append({
-                "page": page_num + 1,
-                "left": int(left),
-                "top": int(top),
-                "width": int(right - left),
-                "height": int(bottom - top),
-                "matched_text": " ".join(match_text),
-                "context": context,
-                "confidence": "high" if first_word["conf"] > 0.8 else "medium",
-            })
+            # Calculate average match confidence
+            avg_score = sum(match_scores) / len(match_scores) if match_scores else 100
+            confidence = "high" if avg_score >= 90 else "medium" if avg_score >= 80 else "low"
 
-    return matches
+            matches.append(
+                {
+                    "page": page_num + 1,
+                    "left": int(left),
+                    "top": int(top),
+                    "width": int(right - left),
+                    "height": int(bottom - top),
+                    "matched_text": " ".join(match_text),
+                    "context": context,
+                    "confidence": confidence,
+                    "match_score": round(avg_score, 1),
+                }
+            )
 
-# ---------------- Routes ---------------- #
+    return matches# Routes
 @app.route("/health", methods=["GET"])
 def health_check():
-    return jsonify({"status": "ok", "easyocr_available": check_easyocr()})
+    return jsonify({"status": "ok", "tesseract_available": check_tesseract()})
+
 
 @app.route("/upload-chunk", methods=["POST"])
 def upload_chunk():
@@ -151,12 +260,15 @@ def upload_chunk():
     index = int(index)
     total = int(total)
     temp_path = os.path.join(UPLOAD_FOLDER, file_name)
+
+    # Append chunk to file
     mode = "ab" if os.path.exists(temp_path) else "wb"
     with open(temp_path, mode) as f:
         f.write(chunk.read())
 
     print(f"Uploaded chunk {index + 1}/{total} for {file_name}")
     return jsonify({"status": "ok"})
+
 
 @app.route("/upload-complete", methods=["POST"])
 def upload_complete():
@@ -171,10 +283,12 @@ def upload_complete():
     print(f"Upload complete for {file_name}")
     return jsonify({"status": "ok", "fileName": file_name})
 
+
 @app.route("/search", methods=["POST"])
 def search_pdf():
     file_name = request.form.get("fileName")
     search_text = request.form.get("search_text")
+
     if not file_name or not search_text:
         return jsonify({"error": "Missing fileName or search_text"}), 400
 
@@ -191,10 +305,10 @@ def search_pdf():
     page_data = [(i, pdf_bytes, search_text) for i in range(total_pages)]
     all_matches = []
 
-    max_workers = get_optimal_workers(total_pages)
-    print(f"Using {max_workers} workers for {total_pages} pages")
+    MAX_WORKERS = get_optimal_workers(total_pages)
+    print(f"Using {MAX_WORKERS} workers for {total_pages} pages")
 
-    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+    with ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
         future_to_page = {executor.submit(process_page, data): data[0] for data in page_data}
         for future in as_completed(future_to_page):
             page_num = future_to_page[future]
@@ -209,14 +323,16 @@ def search_pdf():
         page_num = match["page"]
         if page_num not in pages_with_matches:
             pages_with_matches[page_num] = []
-        pages_with_matches[page_num].append({
-            "left": match["left"],
-            "top": match["top"],
-            "width": match["width"],
-            "height": match["height"],
-            "context": match["context"],
-            "matched_text": match["matched_text"],
-        })
+        pages_with_matches[page_num].append(
+            {
+                "left": match["left"],
+                "top": match["top"],
+                "width": match["width"],
+                "height": match["height"],
+                "context": match["context"],
+                "matched_text": match["matched_text"],
+            }
+        )
 
     processing_time = time.time() - start_time
     results = {
@@ -235,18 +351,21 @@ def search_pdf():
     print(f"✓ Search complete: {len(all_matches)} matches in {len(pages_with_matches)} pages")
     return jsonify(results)
 
-# ---------------- Main ---------------- #
+
+# Main
 if __name__ == "__main__":
     print("\n" + "=" * 60)
-    print("PDF Text Search Backend Server (EasyOCR)")
+    print("PDF Text Search Backend Server")
     print("=" * 60)
 
-    if check_easyocr():
-        print("✓ EasyOCR is available")
+    if check_tesseract():
+        version = pytesseract.get_tesseract_version()
+        print(f"✓ Tesseract OCR installed: {version}")
     else:
-        print("✗ EasyOCR not found or failed to initialize")
+        print("✗ Tesseract OCR not found. Install it before running.")
         exit(1)
 
+    # print(f"Max Workers: {MAX_WORKERS}")
     print(f"OCR DPI: {OCR_DPI}")
     print(f"Min Confidence: {MIN_CONFIDENCE}%")
     print("Server starting on http://localhost:8000")

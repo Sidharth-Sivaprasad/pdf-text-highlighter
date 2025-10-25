@@ -21,13 +21,13 @@ const UploadHistory: React.FC<Props> = ({
 	// onReuse,
 }) => {
 	return (
-		<div className="mt-6 p-6 bg-gray-800/80 rounded-lg shadow text-white">
+		<div className=" bg-slate-500/10 rounded-xl shadow-2xl p-8 text-white border border-white/20 backdrop-blur-md mt-10">
 			<div className="flex items-center justify-between mb-4">
 				<h3 className="font-semibold text-lg">Upload History</h3>
 				{uploadHistory.length > 0 && (
 					<button
 						onClick={onClear}
-						className="text-sm text-red-400 hover:text-red-300 transition-colors"
+						className="text-sm text-red-400/90 hover:text-red-400 transition-colors"
 					>
 						Clear History
 					</button>

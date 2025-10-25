@@ -51,74 +51,81 @@ export default function ResultsPage() {
 	}, [file]);
 
 	return (
-		<div className="min-h-screen bg-gradient-to-br from-indigo-950 via-indigo-990 to-slate-950 p-8 pt-20">
+		<div className="min-h-screen bg-gradient-to-br from-gray-950 via-slate-950 via-amber-950 to-amber-950 p-8 pt-25 antialiased font-sans">
 			<div className="max-w-4xl mx-auto">
-				{/* Back Button */}
-				<button
-					onClick={() => router.push("/")}
-					className="mb-4 flex items-center gap-2 text-white hover:text-indigo-400 transition-colors"
-				>
-					<ArrowLeft className="w-5 h-5" />
-				</button>
+				{/* Header (Back Button and Search Bar) */}
+				<div className="flex items-center gap-4 mb-3">
+					{/* Back Button */}
+					<button
+						onClick={() => router.push("/")}
+						className="flex-shrink-0 flex items-center gap-2 text-white hover:text-indigo-400 transition-colors"
+					>
+						<ArrowLeft className="w-5 h-5" />
+					</button>
 
-				<div className="bg-gray-800/100 rounded-lg shadow-xl p-6 text-white mb-6">
-					<h2 className="text-lg font-semibold mb-3">
-						Search in: {file?.name}
-					</h2>
-					<div className="flex gap-3">
-						<input
-							type="text"
-							value={searchText}
-							onChange={(e) => setSearchText(e.target.value)}
-							placeholder="Enter new search text..."
-							className="flex-1 px-4 py-1 border border-gray-600 rounded-lg bg-gray-900/50 text-white placeholder-gray-400 focus:ring-2 focus:ring-indigo-500"
-							onKeyUp={(e) => e.key === "Enter" && handleNewSearch()}
-						/>
-						<button
-							onClick={handleNewSearch}
-							disabled={processing || !searchText.trim()}
-							className="px-6 py-1 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-gray-500 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
-						>
-							{processing ? (
-								"Searching..."
-							) : (
-								<>
-									<Search className="w-5 h-5" />
-									Search
-								</>
-							)}
-						</button>
-					</div>
-					{error && (
-						<div className="mt-3 p-3 bg-red-900/50 border border-red-500 rounded-lg text-red-200 text-sm">
-							{error}
+					{/* Search Component (Sleek and Compact) */}
+					<div className="flex-1 bg-slate-500/10 rounded-lg shadow-xl p-3 text-white border border-white/20 backdrop-blur-md">
+						<div className="flex gap-3 items-center">
+							<input
+								type="text"
+								value={searchText}
+								onChange={(e) => setSearchText(e.target.value)}
+								placeholder="Enter new search text..."
+								className="flex-1 px-3 py-1 border border-gray-600 rounded-lg bg-gray-900/50 text-white placeholder-gray-400 focus:ring-2 focus:ring-indigo-500"
+								onKeyUp={(e) => e.key === "Enter" && handleNewSearch()}
+							/>
+							<button
+								onClick={handleNewSearch}
+								disabled={processing || !searchText.trim()}
+								className="flex-shrink-0 px-4 py-1 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-gray-500 disabled:cursor-not-allowed flex items-center gap-2 transition-colors text-sm"
+							>
+								{processing ? (
+									"Searching..."
+								) : (
+									<>
+										<Search className="w-4 h-4" />
+										Search
+									</>
+								)}
+							</button>
 						</div>
-					)}
+					</div>
 				</div>
 
-				{/* <div className="bg-gray-800/100 rounded-lg shadow-xl p-8 text-white mb-6">
-					<h1 className="text-3xl font-bold mb-4">Search Results</h1>
-
-					<div className="grid grid-cols-2 gap-4 text-sm">
-						<div className="bg-gray-700/50 p-4 rounded-lg">
-							<p className="text-gray-400 mb-1">Search Query</p>
-							<p className="font-medium">"{results.search_query}"</p>
-						</div>
-
-						<div className="bg-gray-700/50 p-4 rounded-lg">
-							<p className="text-gray-400 mb-1">Total Matches</p>
-							<p className="font-medium text-green-400">
-								{results.total_matches}
-							</p>
-						</div>
-						<div className="bg-gray-700/50 p-4 rounded-lg">
-							<p className="text-gray-400 mb-1">Pages with Matches</p>
-							<p className="font-medium">
-								{results.pages_with_matches} / {results.total_pages}
-							</p>
-						</div>
+				{error && (
+					<div className="p-3 bg-red-900/50 border border-red-500 rounded-lg text-red-200 text-sm max-w-lg mx-auto mb-4">
+						{error}
 					</div>
-				</div> */}
+				)}
+
+				{/* NEW: Search Statistics Box */}
+				<div className="bg-slate-500/10 rounded-lg shadow-xl p-3 text-white border border-white/20 backdrop-blur-md mb-6">
+					<div className="flex items-center gap-4 text-sm">
+						{/* 1. Document Name (Truncated) */}
+						<div className="flex items-center gap-2">
+							<span className="text-gray-400 font-semibold">File:</span>
+							<span className="truncate max-w-xs">{file?.name || "N/A"}</span>
+						</div>
+						<div className="text-gray-600">|</div> {/* Separator */}
+						{/* 2. Total Matches */}
+						<div className="flex items-center gap-2">
+							<span className="text-gray-400 font-semibold">Matches:</span>
+							<span className="font-bold text-indigo-400">
+								{results.total_matches}
+							</span>
+						</div>
+						<div className="text-gray-600">|</div> {/* Separator */}
+						{/* 3. Pages Found */}
+						<div className="flex items-center gap-2">
+							<span className="text-gray-400 font-semibold">Pages:</span>
+							<span className="font-bold">
+								{results.pages_with_matches} / {results.total_pages}
+							</span>
+						</div>
+						<div className="text-gray-600">|</div> {/* Separator */}
+					</div>
+				</div>
+
 				{fileUrl && (
 					<div className="mb-6">
 						<PdfViewer />

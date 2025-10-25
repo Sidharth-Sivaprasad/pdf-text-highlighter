@@ -22,16 +22,63 @@ const PdfUploader: React.FC = () => {
 	const [error, setError] = useState<string | null>(null);
 	const [uploadProgress, setUploadProgress] = useState(0);
 	const [currentStage, setCurrentStage] = useState<string>("");
+	const [isDragging, setIsDragging] = useState(false);
 	const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
+
+	const validateFile = (selectedFile: File): boolean => {
+		if (selectedFile.type !== "application/pdf") {
+			setError("Please select a valid PDF file");
+			return false;
+		}
+		if (selectedFile.size > MAX_FILE_SIZE) {
+			setError("File is too large. Maximum size is 20 MB.");
+			return false;
+		}
+		return true;
+	};
 
 	const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
 		const selectedFile = e.target.files?.[0] ?? null;
-		if (selectedFile && selectedFile.type === "application/pdf") {
+		if (selectedFile && validateFile(selectedFile)) {
 			setFile(selectedFile);
 			setError(null);
 		} else {
 			setFile(null);
-			setError("Please select a valid PDF file");
+		}
+	};
+
+	const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+		e.preventDefault();
+		e.stopPropagation();
+		if (!processing) {
+			setIsDragging(true);
+		}
+	};
+
+	const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+		e.preventDefault();
+		e.stopPropagation();
+		setIsDragging(false);
+	};
+
+	const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+		e.preventDefault();
+		e.stopPropagation();
+	};
+
+	const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+		e.preventDefault();
+		e.stopPropagation();
+		setIsDragging(false);
+
+		if (processing) return;
+
+		const droppedFile = e.dataTransfer.files[0];
+		if (droppedFile && validateFile(droppedFile)) {
+			setFile(droppedFile);
+			setError(null);
+		} else {
+			setFile(null);
 		}
 	};
 
@@ -40,17 +87,12 @@ const PdfUploader: React.FC = () => {
 			setError("Please provide both a PDF file and search text");
 			return;
 		}
-		// ask if this check is needed
-		if (file.size > MAX_FILE_SIZE) {
-			setError("File is too large. Maximum size is 20 MB.");
-			return;
-		}
+
 		setProcessing(true);
 		setError("");
 		setUploadProgress(0);
 
 		try {
-			// Stage 1: Upload
 			setCurrentStage("Uploading PDF...");
 			const data = await performSearch(file, searchText, (percent) => {
 				setUploadProgress(percent);
@@ -59,7 +101,6 @@ const PdfUploader: React.FC = () => {
 				}
 			});
 
-			// Stage 2: Processing complete
 			setCurrentStage("Processing complete!");
 			setUploadProgress(100);
 
@@ -70,7 +111,6 @@ const PdfUploader: React.FC = () => {
 				totalMatches: data.total_matches,
 			});
 
-			// Navigate to results page after brief delay
 			setTimeout(() => {
 				router.push("/results");
 			}, 500);
@@ -95,18 +135,21 @@ const PdfUploader: React.FC = () => {
 	};
 
 	return (
-		<div className="min-h-screen bg-gradient-to-br from-indigo-950 via-indigo-990 to-slate-950 p-8 pt-20">
+		<div className="min-h-screen bg-gradient-to-br from-gray-950 via-slate-950 via-amber-950 to-amber-950 p-8 pt-25 antialiased font-sans">
 			<div className="max-w-4xl mx-auto">
-				{/* Main Box */}
-				<div className="bg-gray-800/100 rounded-lg shadow-xl p-8 text-white">
-					<div className="flex items-center gap-3 mb-8">
+				<div className=" bg-slate-500/10 rounded-xl shadow-2xl p-8 text-white border border-white/20 backdrop-blur-md">
+					<div className="flex items-center gap-3 mb-6">
 						<h1 className="text-3xl font-bold text-white">
 							Image PDF Text Highlighter
 						</h1>
 					</div>
+					<div className="flex items-center gap-3 mb-8">
+						<p className="text-md text-white/80">
+							Smarter Search. Faster Insights. Zero Manual Effort.
+						</p>
+					</div>
 
 					<div className="space-y-6">
-						{/* File Upload */}
 						<div>
 							<label className="block text-sm font-medium text-gray-200 mb-2">
 								Upload PDF (Scanned Images)
@@ -120,41 +163,64 @@ const PdfUploader: React.FC = () => {
 									id="pdf-upload"
 									disabled={processing}
 								/>
-								<label
-									htmlFor="pdf-upload"
-									className={`flex items-center justify-center w-full px-4 py-8 border-2 border-dashed border-gray-600 rounded-lg ${
+								<div
+									onDragEnter={handleDragEnter}
+									onDragOver={handleDragOver}
+									onDragLeave={handleDragLeave}
+									onDrop={handleDrop}
+									className={`flex items-center justify-center w-full px-4 py-8 border-2 border-dashed rounded-lg transition-all ${
+										isDragging
+											? "border-yellow-800 bg-yellow-600/10 scale-[1.02]"
+											: "border-gray-600 bg-gray-900/30"
+									} ${
 										processing
 											? "cursor-not-allowed opacity-50"
-											: "cursor-pointer hover:border-indigo-500"
-									} transition-colors bg-gray-900/30`}
+											: "cursor-pointer hover:border-indigo-400"
+									}`}
 								>
-									{file ? (
-										<div className="flex items-center gap-3">
-											<FileText className="w-6 h-6 text-indigo-400" />
-											<span className="text-white">{file.name}</span>
-											{!processing && (
-												<button
-													onClick={(e) => {
-														e.preventDefault();
-														clearFile();
-													}}
-													className="ml-2 p-1 hover:bg-gray-700 rounded"
+									<label
+										htmlFor="pdf-upload"
+										className="w-full h-full flex items-center justify-center cursor-pointer"
+									>
+										{file ? (
+											<div className="flex items-center gap-3">
+												<FileText className="w-6 h-6 text-indigo-400" />
+												<span className="text-white">{file.name}</span>
+												{!processing && (
+													<button
+														onClick={(e) => {
+															e.preventDefault();
+															clearFile();
+														}}
+														className="ml-2 p-1 hover:bg-gray-700 rounded"
+													>
+														<X className="w-4 h-4 text-gray-400" />
+													</button>
+												)}
+											</div>
+										) : (
+											<div className="text-center">
+												<Upload
+													className={`w-12 h-12 mx-auto mb-2 transition-colors ${
+														isDragging ? "text-indigo-950" : "text-gray-400"
+													}`}
+												/>
+												<p
+													className={`transition-colors ${
+														isDragging ? "text-indigo-950" : "text-gray-300"
+													}`}
 												>
-													<X className="w-4 h-4 text-gray-400" />
-												</button>
-											)}
-										</div>
-									) : (
-										<div className="text-center">
-											<Upload className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-											<p className="text-gray-300">Click to upload PDF</p>
-											<p className="text-sm text-gray-500 mt-1">
-												Up to 300 pages.
-											</p>
-											{/* no checks for page limits */}
-										</div>
-									)}
-								</label>
+													{isDragging
+														? "Drop PDF here"
+														: "Click to upload or drag & drop PDF"}
+												</p>
+												<p className="text-sm text-gray-500 mt-1">
+													Up to 300 pages (Max 20MB)
+												</p>
+											</div>
+										)}
+									</label>
+								</div>
 							</div>
 						</div>
 
@@ -178,20 +244,7 @@ const PdfUploader: React.FC = () => {
 								<button
 									onClick={handleSearch}
 									disabled={processing || !file || !searchText.trim()}
-									className="
-    px-6 py-1 
-    bg-indigo-700 
-    text-white 
-    rounded-lg 
-    hover:bg-indigo-600 
-    disabled:bg-gray-500 
-    disabled:cursor-not-allowed 
-    flex items-center gap-2 
-    transition-colors 
-    min-w-[120px] 
-    justify-center 
-    cursor-pointer
-  "
+									className="px-6 py-1 bg-indigo-700 text-white rounded-lg hover:bg-indigo-600 disabled:bg-gray-500 disabled:cursor-not-allowed flex items-center gap-2 transition-colors min-w-[120px] justify-center cursor-pointer"
 								>
 									{processing ? (
 										<>
@@ -214,8 +267,7 @@ const PdfUploader: React.FC = () => {
 
 						{/* Progress Bar */}
 						{processing && (
-							<div className="p-6 bg-blue-900/50 border border-blue-500 rounded-lg text-blue-100">
-								{/* Stage row */}
+							<div className="p-6  bg-blue-900/30 border border-blue-500 rounded-lg text-blue-100">
 								<div className="flex items-center justify-between mb-3">
 									<div className="flex items-center gap-3">
 										<Loader2 className="w-5 h-5 animate-spin" />
@@ -226,7 +278,6 @@ const PdfUploader: React.FC = () => {
 									</span>
 								</div>
 
-								{/* Progress Bar */}
 								<div className="w-full bg-gray-700 rounded-full h-3 overflow-hidden">
 									<div
 										className="bg-gradient-to-r from-indigo-500 to-blue-500 h-full transition-all duration-500 ease-out rounded-full shadow-lg"
@@ -245,11 +296,7 @@ const PdfUploader: React.FC = () => {
 				</div>
 
 				{/* Upload History */}
-				<UploadHistory
-					uploadHistory={uploadHistory}
-					onClear={clearHistory}
-					// onReuse={(text: string) => setSearchText(text)}
-				/>
+				<UploadHistory uploadHistory={uploadHistory} onClear={clearHistory} />
 			</div>
 		</div>
 	);

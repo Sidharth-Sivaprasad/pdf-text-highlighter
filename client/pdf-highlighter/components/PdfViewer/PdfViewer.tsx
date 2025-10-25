@@ -9,6 +9,7 @@ export default function PdfViewer() {
 	const viewer = useRef<HTMLDivElement>(null);
 	const instanceRef = useRef<WebViewerInstance | null>(null);
 	const isInitialized = useRef(false);
+	const DPI = 300;
 
 	// Initialize WebViewer once
 	useEffect(() => {
@@ -140,7 +141,6 @@ export default function PdfViewer() {
 		// });
 		matches.forEach((match) => {
 			const pageNumber = match.page;
-			if (pageNumber !== 1) return;
 			const pageInfo = documentViewer.getDocument().getPageInfo(pageNumber);
 			if (!pageInfo) {
 				console.warn(`Page ${pageNumber} not found`);
@@ -151,31 +151,16 @@ export default function PdfViewer() {
 
 			match.locations.forEach((location: any) => {
 				try {
-					const x = (location.left * 72) / 400;
-					const y =
-						pageHeight -
-						(location.top * 72) / 400 -
-						(location.height * 72) / 400;
-					const width = (location.width * 72) / 400;
-					const height = (location.height * 72) / 400;
-					console.log(
-						"left",
-						location.left,
-						"top",
-						location.top,
-						"x",
-						x,
-						"y",
-						y,
-						"width",
-						width,
-						"height",
-						height,
-						"pageHeight",
-						pageHeight,
-						"pageWidth",
-						pageInfo.width
-					);
+					const x = (location.left * 72) / DPI;
+					// const y =
+					// 	pageHeight -
+					// 	(location.top * 72) / 400 -
+					// 	(location.height * 72) / 400;
+
+					const y_top_in_points = (location.top * 72) / DPI;
+					const y = y_top_in_points;
+					const width = (location.width * 72) / DPI;
+					const height = (location.height * 72) / DPI;
 
 					const rect = new Annotations.RectangleAnnotation({
 						PageNumber: pageNumber,
