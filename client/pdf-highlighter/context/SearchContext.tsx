@@ -111,10 +111,20 @@ export function SearchProvider({ children }: { children: ReactNode }) {
 		if (!completeRes.ok) throw new Error("Failed to finalize upload");
 
 		if (onProgress) {
-			for (let i = 81; i < 99; i += 2) {
-				onProgress(i);
-				await new Promise((r) => setTimeout(r, 400)); // small delay for smoothness
+			const target = Math.floor(92 + Math.random() * 8); // random between 92–99
+			let progress = 81;
+
+			while (progress < target) {
+				progress += Math.floor(Math.random() * 3) + 1; // +1 to +3 each time
+				if (progress > target) progress = target;
+				onProgress(progress);
+
+				const delay = 300 + Math.random() * 700; // random delay 300–1000ms
+				await new Promise((r) => setTimeout(r, delay));
 			}
+
+			// Final call (ensures UI shows last value)
+			onProgress(target);
 		}
 
 		const searchForm = new FormData();

@@ -17,7 +17,8 @@ interface HighlightLocation {
 interface CurrentHighlight {
 	page: number;
 	matchIndex: number;
-	location: HighlightLocation;
+	locations: HighlightLocation[];
+	matchGroup?: any;
 }
 
 interface PdfViewerProps {
@@ -29,17 +30,15 @@ export default function PdfViewer({ currentHighlight }: PdfViewerProps) {
 	const viewer = useRef<HTMLDivElement>(null);
 	const instanceRef = useRef<WebViewerInstance | null>(null);
 	const isInitialized = useRef(false);
-	const DPI = 300; // DPI is not used in this component, but kept here.
+	const DPI = 300;
 
 	const [isViewerLoading, setIsViewerLoading] = useState(true);
-	console.log("Current Highlight in PdfViewer:", currentHighlight);
 
 	useEffect(() => {
 		if (viewer.current == null) return;
 		if (isInitialized.current) return;
 
 		isInitialized.current = true;
-		// Start loading status when initialization begins
 		setIsViewerLoading(true);
 
 		WebViewer(
@@ -53,7 +52,6 @@ export default function PdfViewer({ currentHighlight }: PdfViewerProps) {
 			.then(async (instance) => {
 				instanceRef.current = instance;
 
-				// Set dark theme
 				instance.UI.setTheme("dark");
 
 				const { documentViewer } = instance.Core;
@@ -67,11 +65,9 @@ export default function PdfViewer({ currentHighlight }: PdfViewerProps) {
 					}
 				});
 
-				// Load document if file exists
 				if (file) {
 					await instance.UI.loadDocument(file, { filename: file.name });
 				} else {
-					// If no initial file, stop loading (or wait for file change)
 					setIsViewerLoading(false);
 				}
 
@@ -83,7 +79,7 @@ export default function PdfViewer({ currentHighlight }: PdfViewerProps) {
 			.catch((err) => {
 				console.error("WebViewer initialization error:", err);
 				isInitialized.current = false;
-				setIsViewerLoading(false); // Stop loading on error
+				setIsViewerLoading(false);
 			});
 
 		return () => {
@@ -97,13 +93,11 @@ export default function PdfViewer({ currentHighlight }: PdfViewerProps) {
 		};
 	}, []);
 
-	// Load document when file changes
 	useEffect(() => {
 		if (!instanceRef.current || !file) return;
 
-		setIsViewerLoading(true); // Start loading when a new file is loaded
+		setIsViewerLoading(true);
 		try {
-			// Note: The 'documentLoaded' listener handles setting setIsViewerLoading(false)
 			instanceRef.current.UI.loadDocument(file, { filename: file.name });
 		} catch (err) {
 			console.error("Error loading document:", err);
@@ -121,7 +115,6 @@ export default function PdfViewer({ currentHighlight }: PdfViewerProps) {
 
 		if (!currentHighlight) {
 			try {
-				// Remove previous overlay highlight (if any)
 				const existing = annotationManager
 					.getAnnotationsList()
 					.filter((a) => a.Author === "CurrentHighlight");
@@ -130,6 +123,9 @@ export default function PdfViewer({ currentHighlight }: PdfViewerProps) {
 					annotationManager.deleteAnnotations(existing, {
 						force: true,
 					});
+					annotationManager.drawAnnotationsFromList(
+						annotationManager.getAnnotationsList()
+					);
 				}
 			} catch (err) {
 				console.error("Error removing current highlight overlay:", err);
@@ -137,13 +133,11 @@ export default function PdfViewer({ currentHighlight }: PdfViewerProps) {
 			return;
 		}
 
-		const { page, location } = currentHighlight;
+		const { page, locations } = currentHighlight;
 
-		// Jump to the target page
 		documentViewer.setCurrentPage(page, true);
 
 		try {
-			// Remove previous overlay highlight (if any)
 			const existing = annotationManager
 				.getAnnotationsList()
 				.filter((a) => a.Author === "CurrentHighlight");
@@ -154,53 +148,61 @@ export default function PdfViewer({ currentHighlight }: PdfViewerProps) {
 				});
 			}
 
-			// Create new overlay highlight
-			const x = (location.left * 72) / 300;
-			const y = (location.top * 72) / 300;
-			const width = (location.width * 72) / 300;
-			const height = (location.height * 72) / 300;
+			locations.forEach((location) => {
+				const x = (location.left * 72) / 300;
+				const y = (location.top * 72) / 300;
+				const width = (location.width * 72) / 300;
+				const height = (location.height * 72) / 300;
 
-			const highlight = new Annotations.RectangleAnnotation({
-				PageNumber: page,
-				X: x,
-				Y: y,
-				Width: width,
-				Height: height,
-				StrokeColor: new Annotations.Color(255, 0, 0), // red border
-				FillColor: new Annotations.Color(255, 0, 0, 0.15), // semi-transparent fill
-				StrokeThickness: 1,
-				Opacity: 0.6,
+				const highlight = new Annotations.RectangleAnnotation({
+					PageNumber: page,
+					X: x,
+					Y: y,
+					Width: width,
+					Height: height,
+					StrokeColor: new Annotations.Color(255, 0, 0),
+					FillColor: new Annotations.Color(255, 0, 0, 0.15),
+					StrokeThickness: 2,
+					Opacity: 0.7,
+				});
+
+				highlight.Author = "CurrentHighlight";
+				annotationManager.addAnnotation(highlight);
 			});
-
-			// Mark this as the temporary “current highlight”
-			highlight.Author = "CurrentHighlight";
-
-			annotationManager.addAnnotation(highlight);
-			annotationManager.drawAnnotationsFromList([highlight]);
+			annotationManager.drawAnnotationsFromList(
+				annotationManager.getAnnotationsList()
+			);
 		} catch (err) {
 			console.error("Error adding current highlight overlay:", err);
 		}
 	}, [currentHighlight]);
 
 	useEffect(() => {
-		if (!instanceRef.current || !results?.matches) return;
+		if (!instanceRef.current) return;
 
-		const { documentViewer } = instanceRef.current.Core;
+		const { documentViewer, annotationManager } = instanceRef.current.Core;
 
-		// Wait for document to be ready
-		if (documentViewer.getDocument()) {
-			addHighlights(instanceRef.current, results.matches);
+		if (!documentViewer.getDocument()) return;
+
+		// Clear existing highlights if no results
+		if (!results?.matches || results.matches.length === 0) {
+			const existingAnnotations = annotationManager.getAnnotationsList();
+			annotationManager.deleteAnnotations(existingAnnotations);
+			annotationManager.drawAnnotationsFromList([]);
+			return;
 		}
+
+		// Add highlights if results exist
+		addHighlights(instanceRef.current, results.matches);
 	}, [results]);
 
-	// Function to add highlights to the PDF (unchanged)
 	const addHighlights = (instance: WebViewerInstance, matches: any[]) => {
 		const { documentViewer, annotationManager, Annotations } = instance.Core;
 
 		// Clear existing annotations
 		const existingAnnotations = annotationManager.getAnnotationsList();
 		annotationManager.deleteAnnotations(existingAnnotations);
-		console.log(matches);
+		console.log("Matches structure:", matches);
 
 		if (matches.length === 0) return;
 
@@ -212,36 +214,40 @@ export default function PdfViewer({ currentHighlight }: PdfViewerProps) {
 				return;
 			}
 
-			match.locations.forEach((location: any) => {
-				try {
-					const x = (location.left * 72) / DPI;
-					const y_top_in_points = (location.top * 72) / DPI;
-					const y = y_top_in_points;
-					const width = (location.width * 72) / DPI;
-					const height = (location.height * 72) / DPI;
+			match.locations.forEach((matchGroup: any) => {
+				const locationArray = matchGroup.locations; //made a change here,check if error occurs
 
-					const rect = new Annotations.RectangleAnnotation({
-						PageNumber: pageNumber,
-						X: x,
-						Y: y,
-						Width: width,
-						Height: height,
-						StrokeColor: new Annotations.Color(242, 89, 18),
-						// FillColor: new Annotations.Color(255, 235, 59, 0),
-						Intensity: 0.1,
-						StrokeThickness: 1,
-					});
-					rect.FillColor = new Annotations.Color(255, 255, 153, 10);
-					rect.Opacity = 0.3;
+				locationArray.forEach((location: any) => {
+					try {
+						const x = (location.left * 72) / DPI;
+						const y_top_in_points = (location.top * 72) / DPI;
+						const y = y_top_in_points;
+						const width = (location.width * 72) / DPI;
+						const height = (location.height * 72) / DPI;
 
-					annotationManager.addAnnotation(rect);
-				} catch (err) {
-					console.error(`Error adding highlight on page ${pageNumber}:`, err);
-				}
+						const rect = new Annotations.RectangleAnnotation({
+							PageNumber: pageNumber,
+							X: x,
+							Y: y,
+							Width: width,
+							Height: height,
+							StrokeColor: new Annotations.Color(242, 89, 18),
+							Intensity: 0.1,
+							StrokeThickness: 1,
+						});
+						// rect.FillColor = new Annotations.Color(255, 255, 153, 10);
+						rect.FillColor = new Annotations.Color(202, 92, 0, 10);
+
+						rect.Opacity = 0.3;
+
+						annotationManager.addAnnotation(rect);
+					} catch (err) {
+						console.error(`Error adding highlight on page ${pageNumber}:`, err);
+					}
+				});
 			});
 		});
 
-		// Redraw annotations
 		annotationManager.drawAnnotationsFromList(
 			annotationManager.getAnnotationsList()
 		);
@@ -254,10 +260,8 @@ export default function PdfViewer({ currentHighlight }: PdfViewerProps) {
 
 	return (
 		<div className="relative h-[900px] w-full rounded-lg shadow-lg overflow-hidden bg-gray-900">
-			{/* The WebViewer container */}
 			<div className="webviewer h-full w-full" ref={viewer}></div>
 
-			{/* The Loader Overlay */}
 			{isViewerLoading && (
 				<div className="absolute inset-0 flex items-center justify-center bg-gray-900/70 backdrop-blur-sm z-10">
 					<div className="flex flex-col items-center text-white">

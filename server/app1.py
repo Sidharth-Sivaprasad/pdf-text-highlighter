@@ -1,6 +1,5 @@
 """
 Image PDF Text Search Backend with OCR and Chunked Upload
-WITH MULTI-LINE HIGHLIGHTING
 """
 
 from flask import Flask, request, jsonify
@@ -14,6 +13,8 @@ import os
 import multiprocessing
 import psutil
 from rapidfuzz import fuzz
+# from fuzzywuzzy import fuzz
+
 
 # Configs
 UPLOAD_FOLDER = "tmp_uploads"
@@ -86,27 +87,30 @@ def process_page(page_data):
         return []
 
 
+
 def find_text_in_page(ocr_data, search_text, page_num):
     """
-    Finds matches in OCR data to find highlights .
-    Returns matches found on this page with .
+    Finds
+    Returns matches found on this page
     """
+    # sentence = []
     matches = []
     search_lower = search_text.lower().strip()
     words = []
-
     for i in range(len(ocr_data["text"])):
         if int(ocr_data["conf"][i]) > MIN_CONFIDENCE:
             word = ocr_data["text"][i].strip()
             if word:
-                words.append({
-                    "text": word,
-                    "left": ocr_data["left"][i],
-                    "top": ocr_data["top"][i],
-                    "width": ocr_data["width"][i],
-                    "height": ocr_data["height"][i],
-                    "index": i,
-                })
+                words.append(
+                    {
+                        "text": word,
+                        "left": ocr_data["left"][i],
+                        "top": ocr_data["top"][i],
+                        "width": ocr_data["width"][i],
+                        "height": ocr_data["height"][i],
+                        "index": i,
+                    }
+                )
 
     search_words = search_lower.split()
 
@@ -115,88 +119,67 @@ def find_text_in_page(ocr_data, search_text, page_num):
         match_text = []
         match_scores = []
 
+
         for j, search_word in enumerate(search_words):
             if i + j < len(words):
                 word_lower = words[i + j]["text"].lower()
-
+                
+                # Calculate similarity score
                 score = fuzz.ratio(word_lower, search_word)
-                if score >= 80:
+                
+                # Match if: exact substring OR high similarity (>= 80%)
+                    #    search_word in word_lower or 
+                    # word_lower in search_word) or
+                is_match = ( score >= 80 )
+                
+                if is_match:
                     match_length += 1
                     match_text.append(words[i + j]["text"])
                     match_scores.append(score)
+                    # sentence.append(f"Matching '{words[i + j]['text']}' with '{search_word}' - Score: {score}")
                 else:
                     break
 
+        # Only accept if all words matched
         if match_length == len(search_words):
+            # sentence = []
             matched_words = words[i : i + match_length]
+            
+            # Calculate bounding box
+            left = min(w["left"] for w in matched_words)
+            top = min(w["top"] for w in matched_words)
+            right = max(w["left"] + w["width"] for w in matched_words)
+            bottom = max(w["top"] + w["height"] for w in matched_words)
 
-            # ---- Group words by line ----
-            lines = []
-            current_line = [matched_words[0]]
-            for word in matched_words[1:]:
-                prev_word = current_line[-1]
-                vertical_distance = abs(word["top"] - prev_word["top"])
-                avg_height = (word["height"] + prev_word["height"]) / 2
-                if vertical_distance > avg_height * 0.5:
-                    lines.append(current_line)
-                    current_line = [word]
-                else:
-                    current_line.append(word)
-            lines.append(current_line)
+            PADDING = 15. # could be made better based on font size or line spacing
+            left = max(0, left - PADDING)
+            top = max(0, top - PADDING)
+            right = right + PADDING
+            bottom = bottom + PADDING
 
-            # ---- Create highlight locations ----
-            locations = []
-            PADDING = 15
-            for line_words in lines:
-                left = min(w["left"] for w in line_words)
-                top = min(w["top"] for w in line_words)
-                right = max(w["left"] + w["width"] for w in line_words)
-                bottom = max(w["top"] + w["height"] for w in line_words)
-                locations.append({
-                    "left": int(max(0, left - PADDING)),
-                    "top": int(max(0, top - PADDING)),
-                    "width": int(right - left + 2 * PADDING),
-                    "height": int(bottom - top + 2 * PADDING),
-                })
+            context_start = max(0, i - 5)
+            context_end = min(len(words), i + match_length + 5)
+            context = " ".join([words[k]["text"] for k in range(context_start, context_end)])
 
-            # ---- Build better context ----
-            CONTEXT_WINDOW = 15 
-            context_start = max(0, i - CONTEXT_WINDOW)
-            context_end = min(len(words), i + match_length + CONTEXT_WINDOW)
+            # Calculate average match confidence
+            # avg_score = sum(match_scores) / len(match_scores) if match_scores else 100
+            # confidence = "high" if avg_score >= 90 else "medium" if avg_score >= 80 else "low"
 
-            # Convert to text to find sentence boundaries
-            raw_context = " ".join([w["text"] for w in words[context_start:context_end]])
-
-            # Try to expand context to sentence boundaries
-            # Search backward for period/question/exclamation
-            before = " ".join(w["text"] for w in words[max(0, context_start - 10):context_start])
-            after = " ".join(w["text"] for w in words[context_end:min(len(words), context_end + 10)])
-
-            # If punctuation exists nearby, extend to it
-            if "." in before or "!" in before or "?" in before:
-                first_punc = max(before.rfind("."), before.rfind("!"), before.rfind("?"))
-                if first_punc != -1:
-                    raw_context = before[first_punc + 1:].strip() + " " + raw_context
-
-            if "." in after or "!" in after or "?" in after:
-                last_punc = min(
-                    [p for p in [after.find("."), after.find("!"), after.find("?")] if p != -1],
-                    default=-1
-                )
-                if last_punc != -1:
-                    raw_context = raw_context + " " + after[:last_punc + 1].strip()
-
-            # Clean and truncate overly long context
-            context = raw_context.strip()
-            if len(context.split()) > 60:
-                context = " ".join(context.split()[:60]) + " …"
-
-            matches.append({
-                "page": page_num + 1,
-                "locations": locations,
-                "matched_text": " ".join(match_text),
-                "context": context,
-            })
+            matches.append(
+                {
+                    "page": page_num + 1,
+                    "left": int(left),
+                    "top": int(top),
+                    "width": int(right - left),
+                    "height": int(bottom - top),
+                    "matched_text": " ".join(match_text),
+                    "context": context,
+                    # "confidence": confidence,
+                    # "match_score": round(avg_score, 1),
+                }
+            )
+        # else :
+        #     sentence = []
 
     return matches
 
@@ -222,11 +205,7 @@ def upload_chunk():
     total = int(total)
     temp_path = os.path.join(UPLOAD_FOLDER, file_name)
 
-    # If first chunk, delete existing file to start fresh
-    if index == 0 and os.path.exists(temp_path):
-        os.remove(temp_path)
-        print(f"Removed existing file: {file_name}")
-
+    # Append chunk to file
     mode = "ab" if os.path.exists(temp_path) else "wb"
     with open(temp_path, mode) as f:
         f.write(chunk.read())
@@ -245,9 +224,8 @@ def upload_complete():
     if not os.path.exists(final_path):
         return jsonify({"error": "File not found"}), 400
 
-    actual_size = os.path.getsize(final_path)
-    print(f"Upload complete for {file_name} ({actual_size} bytes)")
-    return jsonify({"status": "ok", "fileName": file_name, "size": actual_size})
+    print(f"Upload complete for {file_name}")
+    return jsonify({"status": "ok", "fileName": file_name})
 
 
 @app.route("/search", methods=["POST"])
@@ -284,19 +262,21 @@ def search_pdf():
             except Exception as e:
                 print(f"✗ Error on page {page_num + 1}: {str(e)}")
 
-    # Build response with multi-line location support
     pages_with_matches = {}
     for match in all_matches:
         page_num = match["page"]
         if page_num not in pages_with_matches:
             pages_with_matches[page_num] = []
-        
-        # Each match now has an array of locations (one per line)
-        pages_with_matches[page_num].append({
-            "locations": match["locations"],  # Array of {left, top, width, height}
-            "context": match["context"],
-            "matched_text": match["matched_text"],
-        })
+        pages_with_matches[page_num].append(
+            {
+                "left": match["left"],
+                "top": match["top"],
+                "width": match["width"],
+                "height": match["height"],
+                "context": match["context"],
+                "matched_text": match["matched_text"],
+            }
+        )
 
     processing_time = time.time() - start_time
     results = {
@@ -307,8 +287,8 @@ def search_pdf():
         "processing_time": f"{processing_time:.2f}s",
         "search_query": search_text,
         "matches": [
-            {"page": page_num, "occurrences": len(match_list), "locations": match_list}
-            for page_num, match_list in sorted(pages_with_matches.items())
+            {"page": page_num, "occurrences": len(locs), "locations": locs}
+            for page_num, locs in sorted(pages_with_matches.items())
         ],
     }
 
@@ -319,7 +299,7 @@ def search_pdf():
 # Main
 if __name__ == "__main__":
     print("\n" + "=" * 60)
-    print("PDF Text Search Backend Server (MULTI-LINE HIGHLIGHTING)")
+    print("PDF Text Search Backend Server")
     print("=" * 60)
 
     if check_tesseract():

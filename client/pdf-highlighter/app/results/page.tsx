@@ -2,15 +2,9 @@
 import { useRouter } from "next/navigation";
 import { useSearch } from "@/context/SearchContext";
 import { useEffect, useMemo, useState } from "react";
-import {
-	ArrowLeft,
-	Search,
-	Loader2,
-	ChevronLeft,
-	ChevronRight,
-	X,
-} from "lucide-react";
+import { ArrowLeft, Search, Loader2 } from "lucide-react";
 import PdfViewer from "@/components/PdfViewer/PdfViewer";
+import ContextPanel from "@/components/ContextPanel/ContextPanel";
 
 export default function ResultsPage() {
 	const router = useRouter();
@@ -36,45 +30,45 @@ export default function ResultsPage() {
 
 	if (!results) return null;
 
-	// Flatten all highlights into a single array with page info
 	const allHighlights = useMemo(() => {
 		const highlights: Array<{
 			page: number;
-			location: any;
+			locations: any[];
 			matchIndex: number;
+			matchGroup: any;
 		}> = [];
+
 		results.matches.forEach((match, matchIndex) => {
-			match.locations.forEach((location: any) => {
+			match.locations.forEach((matchGroup: any) => {
+				const locationArray = matchGroup.locations;
+
 				highlights.push({
 					page: match.page,
-					location,
+					locations: locationArray,
 					matchIndex,
+					matchGroup,
 				});
 			});
 		});
 		return highlights;
 	}, [results]);
 
-	// Navigate to previous highlight
 	const goToPreviousHighlight = () => {
 		setCurrentHighlightIndex((prev) =>
 			prev > 0 ? prev - 1 : allHighlights.length - 1
 		);
 	};
 
-	// Navigate to next highlight
 	const goToNextHighlight = () => {
 		setCurrentHighlightIndex((prev) =>
 			prev < allHighlights.length - 1 ? prev + 1 : 0
 		);
 	};
 
-	// Navigate to next highlight
 	const clearHighlight = () => {
 		setCurrentHighlightIndex(-1);
 	};
 
-	// search handler
 	const handleNewSearch = async () => {
 		if (!file || !searchText.trim()) {
 			setError("Please enter search text");
@@ -84,7 +78,7 @@ export default function ResultsPage() {
 		setProcessing(true);
 		setError(null);
 		setUploadProgress(0);
-		setCurrentHighlightIndex(0); // Reset highlight navigation
+		setCurrentHighlightIndex(0);
 
 		try {
 			setCurrentStage("Preparing new search...");
@@ -109,24 +103,23 @@ export default function ResultsPage() {
 		}
 	};
 
-	// const fileUrl = useMemo(() => {
-	// 	return file ? URL.createObjectURL(file) : null;
-	// }, [file]);
-
-	// Get current highlight details
 	const currentHighlight = useMemo(() => {
-		// Explicitly return null if the index is set to -1 (the "cleared" state)
 		if (currentHighlightIndex === -1) return null;
-
-		// Return null if there are no highlights at all
 		if (!allHighlights || allHighlights.length === 0) return null;
 
-		// Return the highlight at the current valid index
-		return allHighlights[currentHighlightIndex] || null;
+		const highlight = allHighlights[currentHighlightIndex];
+		if (!highlight) return null;
+
+		return {
+			page: highlight.page,
+			locations: highlight.locations,
+			matchIndex: highlight.matchIndex,
+			matchGroup: highlight.matchGroup,
+		};
 	}, [allHighlights, currentHighlightIndex]);
 
 	return (
-		<div className="min-h-screen bg-gradient-to-br from-gray-950 via-slate-950 via-amber-950 to-amber-950 p-8 pt-25 antialiased font-sans relative">
+		<div className="min-h-screen bg-gradient-to-br from-neutral-950 via-neutral-950 via-amber-950 to-amber-950 p-8 pt-25 antialiased font-sans">
 			{processing && (
 				<div className="fixed top-0 left-0 right-0 z-50 pt-1 shadow-xl bg-transparent backdrop-blur-sm">
 					<div className="max-w-lg mx-auto p-3 rounded-xl bg-blue-900/50 border border-blue-700 text-blue-100">
@@ -154,7 +147,7 @@ export default function ResultsPage() {
 				</div>
 			)}
 
-			<div className="max-w-4xl mx-auto">
+			<div className="max-w-7xl mx-auto">
 				<div className="flex items-center gap-4 mb-3">
 					<button
 						onClick={() => router.push("/")}
@@ -163,7 +156,6 @@ export default function ResultsPage() {
 						<ArrowLeft className="w-5 h-5" />
 					</button>
 
-					{/* Search Component */}
 					<div className="flex-1 bg-slate-500/10 rounded-lg shadow-xl p-3 text-white border border-white/20 backdrop-blur-md">
 						<div className="flex gap-3 items-center">
 							<input
@@ -196,38 +188,37 @@ export default function ResultsPage() {
 				</div>
 
 				{error && (
-					<div className="p-3 bg-red-900/50 border border-red-500 rounded-lg text-red-200 text-sm max-w-4xl mx-auto mb-4">
+					<div className="p-3 bg-red-900/50 border border-red-500 rounded-lg text-red-200 text-sm max-w-7xl mx-auto mb-4">
 						{error}
 					</div>
 				)}
 
-				{/* Stats Box with Navigation */}
-				<div className="bg-slate-500/10 rounded-lg shadow-xl p-3 text-white border border-white/20 backdrop-blur-md mb-6">
-					<div className="flex items-center justify-between gap-4">
-						{/* Stats */}
-						<div className="flex items-center gap-4 text-sm flex-1">
+				{/* <div className="bg-slate-500/10 rounded-lg shadow-xl p-3 text-white border border-white/20 backdrop-blur-md mb-6">
+					<div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+						<div className="flex items-center gap-4 text-sm w-full sm:w-auto">
 							<div className="flex items-center gap-2">
 								<span className="text-gray-400 font-semibold">File:</span>
-								<span className="truncate max-w-xs">{file?.name || "N/A"}</span>
+								<span className="truncate max-w-[100px] sm:max-w-xs">
+									{file?.name || "N/A"}
+								</span>
 							</div>
-							<div className="text-gray-600">|</div>
+
+							<div className="text-gray-600 hidden sm:block">|</div>
 							<div className="flex items-center gap-2">
 								<span className="text-gray-400 font-semibold">Matches:</span>
 								<span className="font-bold text-indigo-400">
 									{results.total_matches}
 								</span>
 							</div>
-							<div className="text-gray-600">|</div>
+							<div className="text-gray-600 hidden sm:block">|</div>
 							<div className="flex items-center gap-2">
 								<span className="text-gray-400 font-semibold">Pages:</span>
 								<span className="font-bold">
 									{results.pages_with_matches} / {results.total_pages}
 								</span>
 							</div>
-						</div>
-
-						{/* Navigation Controls */}
-						{allHighlights.length > 0 && (
+						</div> 
+				{allHighlights.length > 0 && (
 							<div className="flex items-center gap-3 border-l border-gray-600 pl-4">
 								<button
 									onClick={goToPreviousHighlight}
@@ -238,7 +229,9 @@ export default function ResultsPage() {
 								</button>
 								<div className="text-sm font-medium min-w-[80px] text-center">
 									<span className="text-indigo-400">
-										{currentHighlightIndex + 1}
+										{currentHighlightIndex !== -1
+											? currentHighlightIndex + 1
+											: "-"}
 									</span>
 									<span className="text-gray-400">
 										{" "}
@@ -252,45 +245,46 @@ export default function ResultsPage() {
 								>
 									<ChevronRight className="w-4 h-4" />
 								</button>
+								<div className="relative group">
+									<button
+										onClick={clearHighlight}
+										className="p-1.5 bg-indigo-600 hover:bg-indigo-700 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+										title="Clear current highlight"
+									>
+										<X className="w-4 h-4" />
+									</button>
 
-								<button
-									onClick={clearHighlight}
-									className="p-1 bg-indigo-600 hover:bg-indigo-700 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-									title="Next highlight"
-								>
-									<X />
-								</button>
+									<div className="absolute left-1/2 transform -translate-x-1/2 -mt-10 px-2 py-1 bg-gray-800 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
+										Clear Highlight
+									</div>
+								</div>
 							</div>
-						)}
-					</div>
-
-					{/* Current Highlight Info */}
-					{/* {currentHighlight && (
-						<div className="mt-3 pt-3 border-t border-gray-700 text-xs text-gray-400">
-							<div className="flex items-center gap-4">
-								<span>
-									<span className="font-semibold">Page:</span>{" "}
-									{currentHighlight.page}
-								</span>
-								<span>
-									<span className="font-semibold">Position:</span> (
-									{currentHighlight.location.left},{" "}
-									{currentHighlight.location.top})
-								</span>
-								{currentHighlight.location.context && (
-									<span className="truncate flex-1">
-										<span className="font-semibold">Context:</span> "
-										{currentHighlight.location.context.substring(0, 60)}..."
-									</span>
-								)}
-							</div>
-						</div>
-					)} */}
-				</div>
+						)} 
+				 </div>
+				</div> */}
 
 				{file && (
-					<div className="mb-6">
-						<PdfViewer currentHighlight={currentHighlight} />
+					<div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+						{/* Context Panel ABOVE PdfViewer on small screens */}
+						<div className="order-1 lg:order-2 lg:col-span-1">
+							<ContextPanel
+								currentHighlight={currentHighlight}
+								currentHighlightIndex={currentHighlightIndex}
+								totalHighlights={allHighlights.length}
+								onPrevious={goToPreviousHighlight}
+								onNext={goToNextHighlight}
+								onClear={clearHighlight}
+								fileName={file?.name}
+								totalMatches={results.total_matches}
+								pagesWithMatches={results.pages_with_matches}
+								totalPages={results.total_pages}
+							/>
+						</div>
+
+						{/* PdfViewer BELOW on small screens, LEFT on large */}
+						<div className="order-2 lg:order-1 lg:col-span-2">
+							<PdfViewer currentHighlight={currentHighlight} />
+						</div>
 					</div>
 				)}
 			</div>

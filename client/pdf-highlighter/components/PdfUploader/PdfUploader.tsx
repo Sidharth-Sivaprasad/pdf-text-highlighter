@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Upload, FileText, X, Loader2 } from "lucide-react";
 import { useSearch } from "@/context/SearchContext";
@@ -23,7 +23,28 @@ const PdfUploader: React.FC = () => {
 	const [uploadProgress, setUploadProgress] = useState(0);
 	const [currentStage, setCurrentStage] = useState<string>("");
 	const [isDragging, setIsDragging] = useState(false);
-	const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
+	const [uploadMessage, setUploadMessage] = useState(
+		"Uploading and processing PDF. This may take several minutes for large PDFs."
+	);
+	const MAX_FILE_SIZE = 20 * 1024 * 1024; // Not required
+
+	useEffect(() => {
+		let timer: NodeJS.Timeout;
+		if (processing && uploadProgress < 100) {
+			timer = setTimeout(() => {
+				setUploadMessage(
+					"Using smaller excerpts could provide more accurate results."
+				);
+			}, 4000);
+		} else if (uploadProgress >= 100) {
+			setUploadMessage("Finalizing results...");
+		} else {
+			setUploadMessage(
+				"Uploading and processing PDF. This may take several minutes for large PDFs."
+			);
+		}
+		return () => clearTimeout(timer);
+	}, [processing, uploadProgress]);
 
 	const validateFile = (selectedFile: File): boolean => {
 		if (selectedFile.type !== "application/pdf") {
@@ -135,7 +156,7 @@ const PdfUploader: React.FC = () => {
 	};
 
 	return (
-		<div className="min-h-screen bg-gradient-to-br from-gray-950 via-slate-950 via-amber-950 to-amber-950 p-8 pt-25 antialiased font-sans">
+		<div className="min-h-screen bg-gradient-to-br from-neutral-950 via-neutral-950 via-amber-950 to-amber-950 p-8 pt-25 antialiased font-sans">
 			<div className="max-w-4xl mx-auto">
 				<div className=" bg-slate-500/10 rounded-xl shadow-2xl p-8 text-white border border-white/20 backdrop-blur-md">
 					<div className="flex items-center gap-3 mb-6">
@@ -267,7 +288,7 @@ const PdfUploader: React.FC = () => {
 
 						{/* Progress Bar */}
 						{processing && (
-							<div className="p-6  bg-blue-900/30 border border-blue-500 rounded-lg text-blue-100">
+							<div className="p-6  bg-indigo-900/30 border border-indigo-500 rounded-lg text-blue-100">
 								<div className="flex items-center justify-between mb-3">
 									<div className="flex items-center gap-3">
 										<Loader2 className="w-5 h-5 animate-spin" />
@@ -286,9 +307,10 @@ const PdfUploader: React.FC = () => {
 								</div>
 
 								<p className="text-sm mt-3">
-									{uploadProgress < 100
-										? "Uploading and processing PDF with OCR. This may take several minutes for large PDFs."
-										: "Finalizing results..."}
+									{/* {uploadProgress < 100
+										? "Uploading and processing PDF. This may take several minutes for large PDFs."
+										: "Finalizing results..."} */}
+									{uploadMessage}
 								</p>
 							</div>
 						)}
