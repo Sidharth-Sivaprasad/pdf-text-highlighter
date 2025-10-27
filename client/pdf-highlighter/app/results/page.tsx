@@ -263,7 +263,6 @@ export default function ResultsPage() {
 							/>
 						</div>
 
-						{/* PdfViewer BELOW on small screens, LEFT on large */}
 						<div className="order-2 lg:order-1 lg:col-span-2">
 							<PdfViewer currentHighlight={currentHighlight} />
 						</div>

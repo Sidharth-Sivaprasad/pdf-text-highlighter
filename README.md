@@ -8,11 +8,10 @@ An OCR application that enables intelligent text search and highlighting in scan
 
 ## ✨ Features
 
-- 🔍 **OCR-Powered Search**: Extract and search text from scanned PDFs using Tesseract OCR
-- 🎯 **Smart Highlighting**: Multi-line text detection with precise per-line highlighting
-- 🧠 **Fuzzy Matching**: Find text with 80%+ similarity using RapidFuzz
-- 🎨 **Interactive Navigation**: Jump between matches with keyboard shortcuts
-- 📱 **Modern UI**: Dark-themed, responsive interface built with Tailwind CSS
+- **OCR-Powered Search**: Extract and search text from scanned PDFs using Tesseract OCR
+- **Smart Highlighting**: Multi-line text detection with precise per-line highlighting
+- **Fuzzy Matching**: Find text with 80%+ similarity using RapidFuzz
+- **Modern UI**: Dark-themed, responsive interface built with Tailwind CSS
 
 ## 🏗️ Architecture
 
@@ -47,8 +46,6 @@ pdf-text-highlighter/
   Browser Storage                                   Temp File System
   (Temp Files)
 ```
-
-Browser Storage Temp File System
 
 ## 📋 Prerequisites
 
@@ -215,8 +212,8 @@ The application will start on **http://localhost:3000**
 
 4. **Navigate Results**
 
-   - Use ← → arrow buttons on the pabel to jump between matches
-   - Current match is highlighted in red
+   - Use ← → arrow buttons on the panel to jump between matches
+   - Current match is highlighted in red borders
    - All matches are highlighted in orange
    - Click X to clear current highlight
 
@@ -401,7 +398,3 @@ For issues, questions, or suggestions:
 - Open an issue on GitHub
 - Check existing issues for solutions
 - Review troubleshooting section above
-
----
-
-**Built with ❤️ for better PDF text search and highlighting**

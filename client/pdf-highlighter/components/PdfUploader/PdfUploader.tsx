@@ -136,11 +136,14 @@ const PdfUploader: React.FC = () => {
 				router.push("/results");
 			}, 500);
 		} catch (err) {
-			setError(
-				err instanceof Error
-					? err.message
-					: "Failed to process PDF. Make sure the backend server is running on port 8000."
-			);
+			setTimeout(() => {
+				setError(
+					// err instanceof Error
+					// 	? err.message
+					// 	:
+					"Failed to process PDF. Please try again later"
+				);
+			}, 300);
 		} finally {
 			setTimeout(() => {
 				setProcessing(false);
@@ -287,7 +290,7 @@ const PdfUploader: React.FC = () => {
 						)}
 
 						{/* Progress Bar */}
-						{processing && (
+						{processing && !error && (
 							<div className="p-6  bg-indigo-900/30 border border-indigo-500 rounded-lg text-blue-100">
 								<div className="flex items-center justify-between mb-3">
 									<div className="flex items-center gap-3">
@@ -306,12 +309,7 @@ const PdfUploader: React.FC = () => {
 									></div>
 								</div>
 
-								<p className="text-sm mt-3">
-									{/* {uploadProgress < 100
-										? "Uploading and processing PDF. This may take several minutes for large PDFs."
-										: "Finalizing results..."} */}
-									{uploadMessage}
-								</p>
+								<p className="text-sm mt-3">{uploadMessage}</p>
 							</div>
 						)}
 					</div>
