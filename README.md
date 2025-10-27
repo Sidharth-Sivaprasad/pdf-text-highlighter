@@ -47,6 +47,8 @@ pdf-text-highlighter/
   (Temp Files)
 ```
 
+Client-server architecture is ideal here because OCR processing is computationally intensive and requires specialized libraries (Tesseract, PyMuPDF) that don't run efficiently in browsers. By offloading OCR to a Python server, the app leverages multi-core parallel processing (ProcessPoolExecutor with 8 workers) to process pages faster, while keeping the browser responsive. The server can also enables session-based caching where OCR results persist across searches, making subsequent queries on the same PDF nearly instant (<0.5s). Additionally, the separation allows the Next.js frontend to focus on providing a smooth, interactive UI with real-time progress updates and PDF highlighting, while the Flask backend handles heavy lifting with optimized native libraries. This architecture ensures consistent performance across all devices, better resource management, and the ability to scale processing power independently from the user interface.
+
 ## 📋 Prerequisites
 
 ### System Requirements
@@ -256,7 +258,7 @@ NEXT_PUBLIC_PDFTRON_LICENSE_KEY="your-license-key-here"
 ### Test with Sample PDF
 
 1. Test with documents with varying pages
-2. Test with documnets with varying sizes.
+2. Test with documents with varying sizes.
 3. Test with small text searches.
 4. Test with longer text searches.
 5. Test with 2 column layout pdf
@@ -352,8 +354,6 @@ npx webviewer-copy public/lib
 - **File Upload**: Files are stored temporarily in `server/tmp_uploads/`
 - **CORS**: Currently allows `localhost:3000` only
 - **Production**: Update CORS settings and add authentication before deploying
-
-## 📊 Performance Optimization
 
 ## 🛠️ Technology Stack
 
