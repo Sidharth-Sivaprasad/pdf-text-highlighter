@@ -18,7 +18,7 @@ An OCR application that enables intelligent text search and highlighting in scan
 
 ```
 pdf-text-highlighter/
-├── client/                 # Next.js frontend
+├── client/pdf-highlighter/  # Next.js frontend
 │   ├── app/               # Next.js app directory
 │   ├── components/        # React components
 │   ├── context/          # React context providers
@@ -30,19 +30,24 @@ pdf-text-highlighter/
     └── tmp_uploads/      # Temporary file storage (auto-created)
 ```
 
-┌─────────────────┐ HTTP/REST API ┌─────────────────┐
-│ │ ◄────────────────────────────► │ │
-│ Client (Web) │ │ Server (API) │
-│ Next.js │ Request: Upload PDF, │ Flask │
-│ React │ Search Text │ Python │
-│ │ │ │
-│ - UI/UX │ Response: Search Results │ - OCR │
-│ - PDF Viewer │ + Coordinates │ - Processing │
-│ - State Mgmt │ │ │
-└─────────────────┘ └─────────────────┘
-│ │
-│ │
-▼ ▼
+```
+┌─────────────────┐         HTTP/REST API          ┌─────────────────┐
+│                 │ ◄────────────────────────────► │                 │
+│  Client (Web)   │                                │  Server (API)   │
+│   Next.js       │   Request: Upload PDF,         │     Flask       │
+│   React         │            Search Text         │     Python      │
+│                 │                                │                 │
+│  - UI/UX        │   Response: Search Results     │  - OCR          │
+│  - PDF Viewer   │            + Coordinates       │  - Processing   │
+│  - State Mgmt   │                                │                 │
+└─────────────────┘                                └─────────────────┘
+       │                                                    │
+       │                                                    │
+       ▼                                                    ▼
+  Browser Storage                                   Temp File System
+  (Temp Files)
+```
+
 Browser Storage Temp File System
 
 ## 📋 Prerequisites
@@ -64,13 +69,6 @@ Browser Storage Temp File System
 brew install tesseract
 ```
 
-**Ubuntu/Debian:**
-
-```bash
-sudo apt update
-sudo apt install tesseract-ocr
-```
-
 **Windows:**
 
 1. Download installer from [GitHub Releases](https://github.com/UB-Mannheim/tesseract/wiki)
@@ -88,8 +86,7 @@ tesseract --version
 
 1. Visit [Apryse Developer Portal](https://dev.apryse.com/)
 2. Sign up for a free trial account
-3. Create a new project
-4. Copy your license key (you'll need this later)
+3. Copy your license key (you'll need this later)
 
 > **Note**: The free trial is sufficient for development and testing.
 
@@ -120,8 +117,6 @@ venv\Scripts\activate
 # Install dependencies
 pip install -r requirements.txt
 
-# Install RapidFuzz (for fuzzy matching)
-pip install rapidfuzz
 
 # Create .env file
 cat > .env << EOF
@@ -159,6 +154,7 @@ npm install
 # Create .env file
 cat > .env << EOF
 NEXT_PUBLIC_PDFTRON_LICENSE_KEY="your-license-key-here"
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 EOF
 ```
 
@@ -188,24 +184,11 @@ python app.py
 
 The server will start on **http://localhost:8000**
 
-Expected output:
-
-```
-============================================================
-PDF Text Search Backend Server (MULTI-LINE HIGHLIGHTING)
-============================================================
-✓ Tesseract OCR installed: 4.x.x
-OCR DPI: 300
-Min Confidence: 15%
-Server starting on http://localhost:8000
-============================================================
-```
-
 ### Start Frontend Application
 
 ```bash
 # In a new terminal, navigate to client directory
-cd client
+cd client/pdf-highlighter
 npm run dev
 ```
 
@@ -232,9 +215,9 @@ The application will start on **http://localhost:3000**
 
 4. **Navigate Results**
 
-   - Use ← → arrow buttons to jump between matches
+   - Use ← → arrow buttons on the pabel to jump between matches
    - Current match is highlighted in red
-   - All matches are highlighted in yellow
+   - All matches are highlighted in orange
    - Click X to clear current highlight
 
 5. **New Search**
@@ -275,10 +258,12 @@ NEXT_PUBLIC_PDFTRON_LICENSE_KEY="your-license-key-here"
 
 ### Test with Sample PDF
 
-1. Create a simple test Scanned Image PDF with text
-2. Upload to the application
-3. Search for known text phrases
-4. Verify highlighting appears correctly
+1. Test with documents with varying pages
+2. Test with documnets with varying sizes.
+3. Test with small text searches.
+4. Test with longer text searches.
+5. Test with 2 column layout pdf
+6. Test with text that spans 2 pages. (would fail yet to be implemented.)
 
 ### Health Check
 
@@ -393,113 +378,10 @@ npx webviewer-copy public/lib
 - **Image Processing**: Pillow
 - **Concurrency**: ProcessPoolExecutor
 
-## 📝 API Documentation
+### Tools Used
 
-### POST /upload-chunk
-
-Upload PDF in chunks
-
-**Request:**
-
-```
-Content-Type: multipart/form-data
-- chunk: File chunk
-- index: Chunk index (0-based)
-- fileName: Original filename
-- total: Total number of chunks
-```
-
-### POST /upload-complete
-
-Finalize upload
-
-**Request:**
-
-```
-Content-Type: application/x-www-form-urlencoded
-- fileName: Uploaded filename
-```
-
-### POST /search
-
-Search text in PDF
-
-**Request:**
-
-```
-Content-Type: application/x-www-form-urlencoded
-- fileName: PDF filename
-- search_text: Text to search
-```
-
-**Response:**
-
-```json
-{
-	"success": true,
-	"total_matches": 5,
-	"total_pages": 10,
-	"pages_with_matches": 3,
-	"processing_time": "2.45s",
-	"from_cache": false,
-	"matches": [
-		{
-			"page": 1,
-			"occurrences": 2,
-			"locations": [
-				{
-					"locations": [
-						{ "left": 100, "top": 200, "width": 300, "height": 40 }
-					],
-					"context": "surrounding text...",
-					"matched_text": "found text"
-				}
-			]
-		}
-	]
-}
-```
-
-### POST /clear-cache
-
-Clear OCR cache
-
-**Response:**
-
-```json
-{
-	"success": true,
-	"cleared_files": 3,
-	"message": "Cache cleared (3 files removed)"
-}
-```
-
-### GET /health
-
-Server health check
-
-**Response:**
-
-```json
-{
-	"status": "ok",
-	"tesseract_available": true,
-	"cache": {
-		"cached_files": 2,
-		"total_cached_pages": 45
-	}
-}
-```
-
-## 🤝 Contributing
-
-Contributions are welcome! Please follow these steps:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+- **AI Assistants**: Claude (Anthropic), GitHub Copilot (VS Code), Gemini (Google), ChatGPT (OpenAI)
+- **Purpose**: Code generation, architecture planning, debugging assistance, and documentation
 
 ## 📄 License
 
